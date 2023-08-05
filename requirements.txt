@@ -1,0 +1,6 @@
+jupyter
+spacy
+torch
+torchvision
+torchaudio
+tqdm
