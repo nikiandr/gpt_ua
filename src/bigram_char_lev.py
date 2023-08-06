@@ -5,29 +5,33 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 
 # hyperparameters
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 SEED = 42
-BLOCK_SIZE = 8
+BLOCK_SIZE = 128
 EPOCHS = 5000
-TRAIN_SUBSET_LENGTH = 1_000_000
+TRAIN_SUBSET_LENGTH = 5_000_000
 TRAIN_PERC = 0.9
 EVAL_PERIOD = 500
 EVAL_ITERS = 200
-EMBED_SIZE = 32
+EMBED_SIZE = 128
+NUM_HEADS = 4
 LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DATA_FOLDER_PATH = Path('../data/')
+DATA_FILE_PATH = DATA_FOLDER_PATH / "ubertext.wikipedia.filter_rus_gcld+short.text_only.txt"
+MODELS_SAVE_PATH = Path('../weights/')
+MODEL_PATH = MODELS_SAVE_PATH / 'char_bigram_b64_bs128_500epochs_ts5m_lr1e-3_4heads_emb128.pt'
 # ----
 
 print(f"Current device: {DEVICE}")
 
 torch.manual_seed(SEED)
 
-DATA_FOLDER_PATH = Path('../data/')
-DATA_FILE_PATH = DATA_FOLDER_PATH / "ubertext.wikipedia.filter_rus_gcld+short.text_only.txt"
+
 # DATA_FILE_PATH = DATA_FOLDER_PATH / "input.txt"
 with open(DATA_FILE_PATH) as f:
-    dataset = f.read()
-train_subset = dataset[:TRAIN_SUBSET_LENGTH]
+    train_subset = f.read()
+train_subset = train_subset[:TRAIN_SUBSET_LENGTH]
 vocabulary = sorted(list(set(train_subset)))
 
 stoi = {s: i for i, s in enumerate(vocabulary)}
@@ -43,7 +47,7 @@ def encode(text: str, char_map=None) -> list[int]:
 def decode(embedding: list[int], index_map=None) -> str:
     if index_map is None:
         index_map = itos
-    return ''.join([index_map[idx] for idx in embedding])
+    return ''.join([index_map[cur_id] for cur_id in embedding])
 
 
 train_num = int(TRAIN_PERC * len(train_subset))
@@ -53,11 +57,11 @@ train_tensor = torch.tensor(encode(train), dtype=torch.long)
 val_tensor = torch.tensor(encode(val), dtype=torch.long)
 
 
-def random_batch(split: torch.Tensor, batch_s: int = BATCH_SIZE, bls: int = BLOCK_SIZE) -> tuple[
-    torch.Tensor, torch.Tensor]:
+def random_batch(split: torch.Tensor, batch_s: int = BATCH_SIZE,
+                 bls: int = BLOCK_SIZE) -> tuple[torch.Tensor, torch.Tensor]:
     indexes = torch.randint(0, len(split) - bls, (batch_s,))
-    x = torch.stack([split[idx:idx + bls] for idx in indexes])
-    y = torch.stack([split[idx + 1:idx + bls + 1] for idx in indexes])
+    x = torch.stack([split[index:index + bls] for index in indexes])
+    y = torch.stack([split[index + 1:index + bls + 1] for index in indexes])
     return x, y
 
 
@@ -101,7 +105,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    def __init__(self, emb_size: int, num_heads: int = 1, masked: bool = True, *args, **kwarg):
+    def __init__(self, emb_size: int, num_heads, masked: bool = True, *args, **kwarg):
         super().__init__(*args, **kwarg)
         if emb_size % num_heads != 0:
             raise ValueError(f"Embedding size ({emb_size}) is not divisible by number of heads ({num_heads})")
@@ -121,31 +125,24 @@ class AttentionBlock(nn.Module):
 
 
 class BiGramModel(nn.Module):
-    def __init__(self, dict_size: int = None, embedding_size: int = None, blck_size: int = None, num_heads: int = 5):
+    def __init__(self, dict_size, embedding_size, block_size, num_heads):
         super().__init__()
         self.num_heads = num_heads
-        if dict_size is None:
-            self.dict_size = len(vocabulary)
-        else:
-            self.dict_size = dict_size
-        if embedding_size is None:
-            self.embedding_size = EMBED_SIZE
-        else:
-            self.embedding_size = embedding_size
-        if blck_size is None:
-            self.block_size = BLOCK_SIZE
-        else:
-            self.block_size = blck_size
+        self.dict_size = dict_size
+        self.embedding_size = embedding_size
+        self.block_size = block_size
         self.embeddings = nn.Embedding(self.dict_size, self.embedding_size)
         self.positional_embeddings = nn.Embedding(self.block_size, self.embedding_size)
         self.att = nn.Sequential(
             AttentionBlock(self.embedding_size, self.embedding_size),
             AttentionBlock(self.embedding_size, self.embedding_size),
             AttentionBlock(self.embedding_size, self.embedding_size),
+            AttentionBlock(self.embedding_size, self.embedding_size),
+            AttentionBlock(self.embedding_size, self.embedding_size),
         )
         self.lm_head = nn.Linear(self.embedding_size, self.dict_size)
 
-    def forward(self, idxs: torch.Tensor, targs: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, idxs: torch.Tensor, targets: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         b, t = idxs.shape
         # Input: (B, T)
         # Embeds: (B, T, embedding_size)
@@ -155,58 +152,61 @@ class BiGramModel(nn.Module):
         # Embeds + positional embeds: (B, T, embedding_size * head_size), broadcasting on dimension B
         # Logits: (B, T, C)
         embeds = self.att(embeds + positional_embeds)
-        lgits = self.lm_head(embeds)
-        if targs is None:
-            loss = None
+        gits = self.lm_head(embeds)
+        if targets is None:
+            cur_loss = None
         else:
-            B, T, C = lgits.shape
-            lgits = lgits.view(B * T, C)
-            targs = targs.view(B * T)
-            loss = F.cross_entropy(lgits, targs)
-        return lgits, loss
+            b, t, c = gits.shape
+            gits = gits.view(b * t, c)
+            targets = targets.view(b * t)
+            cur_loss = F.cross_entropy(gits, targets)
+        return gits, cur_loss
 
-    def generate(self, idxs: torch.Tensor, max_token_gen: int = 20):
+    @torch.no_grad()
+    def generate(self, ids: torch.Tensor, max_token_gen: int = 20):
         # idx of size (B, T)
         for _ in tqdm(range(max_token_gen)):
             # crop idx to be only last block
-            idx_cond = idxs[:, -self.block_size:]
+            idx_cond = ids[:, -self.block_size:]
             # logits of size (B, T, C)
-            logits, _ = self(idx_cond)
+            logs, _ = self(idx_cond)
             # logit of size (B, C)
-            logit = logits[:, -1, :]
+            logit = logs[:, -1, :]
             # probs of size (B, C)
             probs = F.softmax(logit, dim=-1)
             # next_characters of size (B, 1)
             next_characters = torch.multinomial(probs, num_samples=1)
-            idxs = torch.cat([idxs, next_characters], 1)
-        return idxs
+            ids = torch.cat([ids, next_characters], 1)
+        return ids
+
+    @torch.no_grad()
+    def estimate_loss(self, train_set: torch.Tensor, val_set: torch.Tensor):
+        out = {}
+        self.eval()
+        for split in [("train", train_set),
+                      ("val", val_set)]:
+            avg_loss = 0
+            for _ in range(EVAL_ITERS):
+                x_batch, y_batch = random_batch(split[1], batch_s=BATCH_SIZE, bls=self.block_size)
+                x_batch, y_batch = x_batch.to(DEVICE), y_batch.to(DEVICE)
+                _, cur_loss = self(x_batch, y_batch)
+                avg_loss += cur_loss
+            out[split[0]] = avg_loss / EVAL_ITERS
+        self.train()
+        return out
 
 
-model = BiGramModel().to(DEVICE)
+model = BiGramModel(dict_size=len(vocabulary),
+                    embedding_size=EMBED_SIZE,
+                    block_size=BLOCK_SIZE,
+                    num_heads=NUM_HEADS).to(DEVICE)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
-
-@torch.no_grad()
-def estimate_loss():
-    out = {}
-    model.eval()
-    for split in [("train", train_tensor),
-                  ("val", val_tensor)]:
-        avg_loss = 0
-        for iter in range(EVAL_ITERS):
-            xb, yb = random_batch(split[1], batch_s=BATCH_SIZE, bls=BLOCK_SIZE)
-            xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-            _, loss = model(xb, yb)
-            avg_loss += loss
-        out[split[0]] = avg_loss / EVAL_ITERS
-    model.train()
-    return out
-
-
 for epoch in tqdm(range(EPOCHS)):
     if epoch % EVAL_PERIOD == 0:
-        losses = estimate_loss()
+        losses = model.estimate_loss(train_set=train_tensor,
+                                     val_set=val_tensor)
         print(f"Iteration: {epoch}, validation loss: {losses['val']}, train loss: {losses['train']}")
     xb, yb = random_batch(train_tensor, batch_s=BATCH_SIZE, bls=BLOCK_SIZE)
     xb, yb = xb.to(DEVICE), yb.to(DEVICE)
@@ -215,7 +215,9 @@ for epoch in tqdm(range(EPOCHS)):
     loss.backward()
     optimizer.step()
 print(f"Final loss: {loss.item()}")
+torch.save(model.state_dict(), MODEL_PATH)
 
+print("Generating example: ")
 idx = torch.zeros((1, 1), dtype=torch.long).to(DEVICE)
-idx_gen = model.generate(idx, max_token_gen=10000)
+idx_gen = model.generate(idx, max_token_gen=1000)
 print(decode(idx_gen[0].tolist()))
