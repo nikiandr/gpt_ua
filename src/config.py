@@ -21,5 +21,5 @@ DATA_FILE_PATH = DATA_FOLDER_PATH / "ubertext.wikipedia.filter_rus_gcld+short.te
 MODELS_SAVE_PATH = Path('../weights/')
 MODEL_PATH = MODELS_SAVE_PATH / 'char_bigram_b64_bs128_500epochs_ts5m_lr1e-3_4heads_emb128.pt'
 TOKENIZER_PATH = Path("../data/tokenizer-ubertext-wiki.json")
-TOKENIZED_DATASET_PATH = DATA_FOLDER_PATH / "ubertext.wikipedia.filter_rus_gcld+short.text_only.tokenized.bin"
+TOKENIZED_DATASET_PATH = DATA_FOLDER_PATH / "ubertext.wikipedia.filter_rus_gcld+short.text_only.tokenized.npy"
 # ----
