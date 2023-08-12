@@ -42,11 +42,11 @@ class SelfAttentionHead(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, emb_size: int, head_sz: int, num_heads: int = 1, masked: bool = True, *args, **kwarg):
+    def __init__(self, emb_size: int, num_heads: int = 1, masked: bool = True, *args, **kwarg):
         super().__init__(*args, **kwarg)
         self.emb_size = emb_size
-        self.head_size = head_sz
         self.num_heads = num_heads
+        self.head_size = self.emb_size // num_heads
         self.masked = masked
         self.heads = nn.ModuleList([SelfAttentionHead(self.emb_size, self.head_size) for _ in range(num_heads)])
         self.proj = nn.Linear(self.head_size * self.num_heads, self.head_size * self.num_heads)
@@ -65,11 +65,11 @@ class AttentionBlock(nn.Module):
         self.emb_size = emb_size
         self.num_heads = num_heads
         self.masked = masked
-        self.attention_heads = MultiHeadAttention(self.emb_size, self.emb_size // self.num_heads, self.num_heads)
+        self.attention_heads = MultiHeadAttention(self.emb_size, self.num_heads)
         self.fc = nn.Sequential(
-            nn.Linear(self.emb_size, self.emb_size),
+            nn.Linear(self.emb_size, 4 * self.emb_size),
             nn.ReLU(),
-            nn.Linear(self.emb_size, self.emb_size)
+            nn.Linear(4 * self.emb_size, self.emb_size)
         )
         self.ln1 = nn.LayerNorm(self.emb_size)
         self.ln2 = nn.LayerNorm(self.emb_size)
