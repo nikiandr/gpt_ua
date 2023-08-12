@@ -49,9 +49,12 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.masked = masked
         self.heads = nn.ModuleList([SelfAttentionHead(self.emb_size, self.head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(self.head_size * self.num_heads, self.head_size * self.num_heads)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.cat([head(x) for head in self.heads], -1)
+        out = torch.cat([head(x) for head in self.heads], -1)
+        out = self.proj(out)
+        return out
 
 
 class AttentionBlock(nn.Module):
@@ -65,12 +68,15 @@ class AttentionBlock(nn.Module):
         self.attention_heads = MultiHeadAttention(self.emb_size, self.emb_size // self.num_heads, self.num_heads)
         self.fc = nn.Sequential(
             nn.Linear(self.emb_size, self.emb_size),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Linear(self.emb_size, self.emb_size)
         )
+        self.ln1 = nn.LayerNorm(self.emb_size)
+        self.ln2 = nn.LayerNorm(self.emb_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = x + self.attention_heads(x)
-        out = out + self.fc(out)
+        out = x + self.attention_heads(self.ln1(x))
+        out = out + self.fc(self.ln2(out))
         return out
 
 
@@ -85,11 +91,7 @@ class BiGramModel(nn.Module):
         self.embeddings = nn.Embedding(self.dict_size, self.embedding_size)
         self.positional_embeddings = nn.Embedding(self.block_size, self.embedding_size)
         self.att = nn.Sequential(
-            AttentionBlock(self.embedding_size, self.embedding_size),
-            AttentionBlock(self.embedding_size, self.embedding_size),
-            AttentionBlock(self.embedding_size, self.embedding_size),
-            AttentionBlock(self.embedding_size, self.embedding_size),
-            AttentionBlock(self.embedding_size, self.embedding_size),
+            *[AttentionBlock(self.embedding_size, self.embedding_size) for _ in range(self.block_number)]
         )
         self.lm_head = nn.Linear(self.embedding_size, self.dict_size)
 

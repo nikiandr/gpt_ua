@@ -5,3 +5,4 @@ tokenizers~=0.13.3
 numpy~=1.25.2
 datasets
 huggingface_hub
+torchinfo
