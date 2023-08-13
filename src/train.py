@@ -5,7 +5,7 @@ import os
 import logging
 
 import torch
-import bigram_char_model as bg
+import model as bg
 import numpy as np
 from tokenizers import Tokenizer
 from torchinfo import summary
@@ -25,26 +25,6 @@ torch.manual_seed(SEED)
 
 logger.debug(f"Memory allocated before start: {torch.cuda.memory_allocated() * 1e-9} gb")
 
-# DATA_FILE_PATH = DATA_FOLDER_PATH / "input.txt"
-# with open(DATA_FILE_PATH) as f:
-#     train_subset = f.read()
-# train_subset = train_subset[:TRAIN_SUBSET_LENGTH]
-# vocabulary = sorted(list(set(train_subset)))
-#
-# stoi = {s: i for i, s in enumerate(vocabulary)}
-# itos = {i: s for i, s in enumerate(vocabulary)}
-
-# def encode(text: str, char_map=None) -> list[int]:
-#     if char_map is None:
-#         char_map = stoi
-#     return [char_map[char] for char in text]
-#
-#
-# def decode(embedding: list[int], index_map=None) -> str:
-#     if index_map is None:
-#         index_map = itos
-#     return ''.join([index_map[cur_id] for cur_id in embedding])
-
 tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
 train_subset = np.load(TOKENIZED_DATASET_PATH, mmap_mode='r')[:TRAIN_SUBSET_LENGTH]
 
@@ -61,11 +41,11 @@ logger.debug(f"Train tensor shape: {val_tensor.size()}")
 
 # ex-model place
 
-model = bg.BiGramModel(dict_size=tokenizer.get_vocab_size(),
-                       embedding_size=EMBED_SIZE,
-                       block_size=BLOCK_SIZE,
-                       num_heads=NUM_HEADS,
-                       block_number=BLOCK_NUMBER).to(DEVICE)
+model = bg.GPT(dict_size=tokenizer.get_vocab_size(),
+               embedding_size=EMBED_SIZE,
+               block_size=BLOCK_SIZE,
+               num_heads=NUM_HEADS,
+               block_number=BLOCK_NUMBER).to(DEVICE)
 
 
 if logger.level == logging.DEBUG:
@@ -94,7 +74,7 @@ for epoch in tqdm(range(EPOCHS)):
     loss.backward()
     optimizer.step()
 logger.info(f"Final loss: {loss.item()}")
-torch.save(model.state_dict(), MODEL_PATH)
+torch.save(model, MODEL_PATH)
 
 
 idx = torch.zeros((1, 1), dtype=torch.long).to(DEVICE)

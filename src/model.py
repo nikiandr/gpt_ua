@@ -80,7 +80,7 @@ class AttentionBlock(nn.Module):
         return out
 
 
-class BiGramModel(nn.Module):
+class GPT(nn.Module):
     def __init__(self, dict_size: int, embedding_size: int, block_size: int, num_heads: int, block_number: int):
         super().__init__()
         self.num_heads = num_heads
