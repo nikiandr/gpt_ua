@@ -3,8 +3,6 @@ from pathlib import Path
 from tokenizers import Tokenizer
 import torch
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 parser = argparse.ArgumentParser(description='Inference of GPT network.')
 
 parser.add_argument('weights', metavar='<weights>', type=str,
@@ -15,8 +13,21 @@ parser.add_argument('start', metavar='<start>', type=str,
                     help='start of string for generating')
 parser.add_argument('--num_tokens', type=int, default=100,
                     help='number of tokens to generate (default: 100)')
+parser.add_argument('--device', type=str, choices=["cuda", "cpu"],
+                    help='device on which to run inference (default: cuda if available, else cpu)')
 
 args = parser.parse_args()
+
+match args.device:
+    case "cuda":
+        DEVICE = "cuda" if torch.cuda.is_available() else None
+        if DEVICE is None:
+            raise ValueError("Device cuda is not available.")
+    case "cpu":
+        DEVICE = "cpu"
+    case _:
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 tokenizer_path = Path(args.tokenizer_path)
 if not tokenizer_path.is_file() or tokenizer_path.suffix != ".json":
