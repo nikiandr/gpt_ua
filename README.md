@@ -27,6 +27,6 @@ After having tokenized dataset in a file you can start training. Configs of the 
 to match your needs.
 
 ## Architecture 
-![](./gpt_illustration.svg)
+  <img src="./gpt_illustration.svg">
 
 Neural network consists from 8 attention blocks.
