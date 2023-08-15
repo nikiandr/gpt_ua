@@ -2,6 +2,17 @@
 
 GPT language model from scratch trained on UberText 2.0. wikipedia subcorpora.
 
+## Structure
+  <img src="./gpt_illustration.svg">
+
+Neural network consists from learnable embeddings block which has token embeddings and positional embeddings added up
+together, N attention blocks and last Linear + Softmax layer to generate output probabilities of the next token in 
+dictionary. 
+
+Each attention block consists of a Multi-head self-attention and Fully connected layer with residual connection and layer norm before the subblock. For the activation function, ReLU is used.
+
+Output probabilities are used for next token generation in an autoregressive fashion: the process starts with an input string, it gets tokenized and inputed in model, after that we sample from output distribution and get next token, process continues until the max_token threshold is hit.
+
 ## Train
 All directions described in here were tested and written for Linux.
 
@@ -23,10 +34,27 @@ To tokenize dataset and save it in binary file on disk you should run **Split an
 **Tokenize dataset** sections in `experiments/03_tokenize_dataset.ipynb` Jupyter notebook. 
 
 After having tokenized dataset in a file you can start training. Configs of the training process could be found in 
-`src/config.py` file. To reproduce the results of this repo you should use standard config but you can change it 
+`src/config.py` file. To reproduce the results of this repo you should use standard config but you can change it inf
 to match your needs.
 
-## Architecture 
-  <img src="./gpt_illustration.svg">
+## Inference 
+For inference pre-trained model is available. Weights and details about the pre-trained model are available [here](https://huggingface.co/nikiandr/gpt_ua).
 
-Neural network consists from 8 attention blocks.
+For inference in auto-regressive fashion `src/inference.py` script is used:
+```
+usage: inference.py [-h] [--num_tokens NUM_TOKENS] [--device {cuda,cpu}]
+                    <weights> <tokenizer_path> <start>
+
+Inference of GPT network.
+
+positional arguments:
+  <weights>             path to model weights
+  <tokenizer_path>      tokenizer file path
+  <start>               start of string for generating
+
+options:
+  -h, --help            show this help message and exit
+  --num_tokens NUM_TOKENS
+                        number of tokens to generate (default: 100)
+  --device {cuda,cpu}   device on which to run inference (default: cuda if available, else cpu)
+```
