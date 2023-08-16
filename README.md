@@ -37,6 +37,8 @@ After having tokenized dataset in a file you can start training. Configs of the 
 `src/config.py` file. To reproduce the results of this repo you should use standard config but you can change it inf
 to match your needs.
 
+Tokenizer used for this model is BPE tokenizer trained on the whole [UberText 2.0.](https://lang.org.ua/en/ubertext/) wiki subcorpora.
+
 ## Inference 
 For inference pre-trained model is available. Weights and details about the pre-trained model are available [here](https://huggingface.co/nikiandr/gpt_ua).
 
