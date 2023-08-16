@@ -1,6 +1,6 @@
 # gpt_ua
 
-GPT language model from scratch trained on UberText 2.0. wikipedia subcorpora.
+GPT-like language model from scratch trained on UberText 2.0. wikipedia subcorpora.
 
 ## Structure
   <img src="./gpt_illustration.svg">
